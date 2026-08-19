@@ -1,14 +1,11 @@
 const { Pool } = require('pg');
-require('dotenv').config(); // Esto carga los datos del archivo .env
+require('dotenv').config();
 
-// Creamos la conexión (Pool) usando los datos de tu .env
+// Usamos la URL de la base de datos si existe (en Render), si no, usamos las variables locales
 const pool = new Pool({
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    host: process.env.DB_HOST,
-    port: process.env.DB_PORT,
-    database: process.env.DB_NAME
+  connectionString: process.env.DATABASE_URL,
+  // Configuramos SSL requerido por servicios en la nube como Render
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
 });
 
-// Exportamos esta conexión para poder usarla en otros archivos
 module.exports = pool;
