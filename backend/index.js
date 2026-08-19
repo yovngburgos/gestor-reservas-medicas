@@ -1,120 +1,155 @@
 const express = require('express');
 const cors = require('cors');
-const pool = require('./db/db'); // Importamos nuestra conexión a la base de datos
+const pool = require('./db/db');
 require('dotenv').config();
 
 const app = express();
-
 app.use(cors());
 app.use(express.json());
 
-// Nueva ruta para probar la conexión a PostgreSQL
-app.get('/test-db', async (req, res) => {
-    try {
-        // Hacemos una consulta muy simple a la base de datos
-        const result = await pool.query('SELECT NOW()');
-        res.json({ 
-            mensaje: '¡Conexión exitosa a la base de datos PostgreSQL! 🎉', 
-            hora_servidor_bd: result.rows[0].now 
-        });
-    } catch (error) {
-        console.error('Error conectando a la base de datos:', error);
-        res.status(500).json({ error: 'Hubo un problema al conectar con la base de datos' });
+// 1. Obtener todas las especialidades
+app.get('/api/especialidades', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM especialidades ORDER BY nombre ASC');
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al obtener especialidades' });
+  }
+});
+
+// 2. Obtener médicos por especialidad (o todos si no especifica)
+app.get('/api/medicos', async (req, res) => {
+  const { especialidad_id } = req.query;
+  try {
+    let query = `
+      SELECT m.id, m.nombre, m.rut_dni, m.email, m.telefono, e.nombre AS especialidad 
+      FROM medicos m 
+      LEFT JOIN especialidades e ON m.especialidad_id = e.id
+    `;
+    let params = [];
+    if (especialidad_id) {
+      query += ' WHERE m.especialidad_id = $1';
+      params.push(especialidad_id);
     }
+    query += ' ORDER BY m.nombre ASC';
+    
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al obtener médicos' });
+  }
 });
 
-// Tu ruta original
-app.get('/', (req, res) => {
-    res.send('¡Hola! El servidor del centro médico está funcionando 🏥');
-});
-
-// Ruta para obtener las horas disponibles de un día específico
+// 3. Obtener horas disponibles por médico y fecha
 app.get('/api/horas-disponibles', async (req, res) => {
-    try {
-        const { fecha } = req.query; 
-        
-        if (!fecha) {
-            return res.status(400).json({ error: 'Debes enviar una fecha en el formato YYYY-MM-DD' });
-        }
+  const { fecha, medico_id } = req.query;
+  if (!fecha) {
+    return res.status(400).json({ error: 'Debes proporcionar una fecha' });
+  }
 
-        const horarioAtencion = [
-            '09:00:00', '10:00:00', '11:00:00', '12:00:00', 
-            '13:00:00', '14:00:00', '15:00:00', '16:00:00', '17:00:00'
-        ];
+  const todasLasHoras = [
+    '09:00:00', '10:00:00', '11:00:00', '12:00:00',
+    '13:00:00', '14:00:00', '15:00:00', '16:00:00', '17:00:00'
+  ];
 
-        const result = await pool.query(
-            "SELECT hora FROM citas WHERE fecha = $1 AND estado = 'reservada'", 
-            [fecha]
-        );
-        
-        const horasOcupadas = result.rows.map(cita => cita.hora);
-        const horasDisponibles = horarioAtencion.filter(hora => !horasOcupadas.includes(hora));
+  try {
+    let query = 'SELECT hora FROM citas WHERE fecha = $1';
+    let params = [fecha];
 
-        res.json({
-            fecha_consultada: fecha,
-            horas_disponibles: horasDisponibles
-        });
-
-    } catch (error) {
-        console.error('Error al obtener horas:', error);
-        res.status(500).json({ error: 'Hubo un problema en el servidor' });
+    if (medico_id) {
+      query += ' AND medico_id = $2';
+      params.push(medico_id);
     }
+
+    const result = await pool.query(query, params);
+    const horasOcupadas = result.rows.map(row => row.hora);
+    const horasDisponibles = todasLasHoras.filter(hora => !horasOcupadas.includes(hora));
+
+    res.json({ fecha, medico_id, horas_disponibles: horasDisponibles });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al consultar disponibilidad' });
+  }
 });
 
-// Ruta para crear una nueva reserva (POST)
+// 4. Reservar una cita
 app.post('/api/reservar', async (req, res) => {
-    // 1. Recibimos los datos que envía el usuario desde el frontend
-    const { nombre, rut_dni, email, telefono, fecha, hora, motivo } = req.body;
+  const { nombre, rut_dni, email, telefono, fecha, hora, motivo, medico_id } = req.body;
 
-    // 2. Validamos que no falten datos importantes
-    if (!nombre || !rut_dni || !email || !fecha || !hora) {
-        return res.status(400).json({ error: 'Faltan datos obligatorios para la reserva.' });
+  if (!nombre || !rut_dni || !email || !fecha || !hora || !medico_id) {
+    return res.status(400).json({ error: 'Todos los campos obligatorios deben ser completados' });
+  }
+
+  try {
+    // Verificar si ya existe paciente
+    let pacienteRes = await pool.query('SELECT id FROM pacientes WHERE rut_dni = $1', [rut_dni]);
+    let pacienteId;
+
+    if (pacienteRes.rows.length === 0) {
+      const nuevoPaciente = await pool.query(
+        'INSERT INTO pacientes (nombre, rut_dni, email, telefono) VALUES ($1, $2, $3, $4) RETURNING id',
+        [nombre, rut_dni, email, telefono]
+      );
+      pacienteId = nuevoPaciente.rows[0].id;
+    } else {
+      pacienteId = pacienteRes.rows[0].id;
     }
 
-    try {
-        // 3. Guardamos o actualizamos al paciente
-        // El "ON CONFLICT" es una magia de PostgreSQL para que, si el RUT ya existe, 
-        // simplemente actualice los datos en lugar de arrojar un error.
-        const pacienteResult = await pool.query(
-            `INSERT INTO pacientes (nombre, rut_dni, email, telefono) 
-             VALUES ($1, $2, $3, $4)
-             ON CONFLICT (rut_dni) 
-             DO UPDATE SET nombre = EXCLUDED.nombre, email = EXCLUDED.email, telefono = EXCLUDED.telefono
-             RETURNING id`,
-            [nombre, rut_dni, email, telefono]
-        );
-        
-        const pacienteId = pacienteResult.rows[0].id;
+    // Verificar si la hora está libre para ESE médico
+    const citaExistente = await pool.query(
+      'SELECT id FROM citas WHERE fecha = $1 AND hora = $2 AND medico_id = $3',
+      [fecha, hora, medico_id]
+    );
 
-        // 4. Guardamos la reserva médica
-        const citaResult = await pool.query(
-            `INSERT INTO citas (fecha, hora, paciente_id, estado, motivo)
-             VALUES ($1, $2, $3, 'reservada', $4)
-             RETURNING *`,
-            [fecha, hora, pacienteId, motivo]
-        );
-
-        // 5. Respondemos con éxito
-        res.status(201).json({
-            mensaje: '¡Reserva confirmada con éxito! 🎉',
-            cita: citaResult.rows[0]
-        });
-
-    } catch (error) {
-        console.error('Error al crear la reserva:', error);
-        
-        // 23505 es el código de error de PostgreSQL para "Violación de restricción única"
-        // Esto salta gracias al UNIQUE (fecha, hora) que pusimos al crear la tabla
-        if (error.code === '23505') {
-            return res.status(400).json({ error: 'Lo sentimos, esa hora acaba de ser reservada por alguien más.' });
-        }
-        
-        res.status(500).json({ error: 'Hubo un problema interno en el servidor.' });
+    if (citaExistente.rows.length > 0) {
+      return res.status(400).json({ error: 'La hora seleccionada ya no está disponible para este médico.' });
     }
+
+    // Crear cita
+    const nuevaCita = await pool.query(
+      'INSERT INTO citas (paciente_id, medico_id, fecha, hora, motivo) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [pacienteId, medico_id, fecha, hora, motivo]
+    );
+
+    res.status(201).json({ mensaje: '¡Reserva confirmada con éxito! 🎉', cita: nuevaCita.rows[0] });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error interno del servidor al procesar la reserva' });
+  }
 });
 
-// Usamos el puerto del .env o el 3000 por defecto
+// 5. Panel de Administración: Obtener todas las citas agendadas con detalles
+app.get('/api/admin/citas', async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        c.id, 
+        c.fecha, 
+        c.hora, 
+        c.motivo,
+        p.nombre AS paciente_nombre, 
+        p.rut_dni AS paciente_rut, 
+        p.email AS paciente_email, 
+        p.telefono AS paciente_telefono,
+        m.nombre AS medico_nombre,
+        e.nombre AS especialidad
+      FROM citas c
+      JOIN pacientes p ON c.paciente_id = p.id
+      JOIN medicos m ON c.medico_id = m.id
+      LEFT JOIN especialidades e ON m.especialidad_id = e.id
+      ORDER BY c.fecha DESC, c.hora ASC
+    `;
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al obtener la lista de citas' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Servidor corriendo en http://localhost:${PORT}`);
+  console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
