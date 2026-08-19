@@ -149,6 +149,24 @@ app.get('/api/admin/citas', async (req, res) => {
   }
 });
 
+// 6. Panel de Administración: Cancelar una cita
+app.delete('/api/admin/citas/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query('DELETE FROM citas WHERE id = $1 RETURNING *', [id]);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'La cita especificada no existe' });
+    }
+
+    res.json({ mensaje: 'Cita cancelada y hora liberada correctamente 🗑️' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error interno al intentar cancelar la cita' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);

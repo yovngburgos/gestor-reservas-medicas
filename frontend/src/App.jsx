@@ -67,6 +67,30 @@ function App() {
       .catch(err => console.error("Error al cargar citas de admin:", err));
   };
 
+  // 5. Cancelar una cita desde el panel administrativo
+  const cancelarCita = async (id) => {
+    const confirmar = window.confirm('¿Estás seguro de que deseas cancelar esta cita médica?');
+    if (!confirmar) return;
+
+    try {
+      const respuesta = await fetch(`http://localhost:3000/api/admin/citas/${id}`, {
+        method: 'DELETE'
+      });
+
+      const data = await respuesta.json();
+
+      if (respuesta.ok) {
+        alert(data.mensaje);
+        cargarCitasAdmin(); // Recargar la tabla automáticamente
+      } else {
+        alert(data.error);
+      }
+    } catch (error) {
+      console.error("Error al cancelar la cita:", error);
+      alert("Error de conexión al intentar cancelar.");
+    }
+  };
+
   useEffect(() => {
     if (tab === 'admin') {
       cargarCitasAdmin();
@@ -306,6 +330,7 @@ function App() {
                     <th className="p-3">Médico</th>
                     <th className="p-3">Especialidad</th>
                     <th className="p-3">Contacto</th>
+                    <th className="p-3 text-center">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
@@ -326,6 +351,14 @@ function App() {
                       <td className="p-3 text-xs text-slate-500">
                         {cita.paciente_email} <br />
                         {cita.paciente_telefono}
+                      </td>
+                      <td className="p-3 text-center">
+                        <button 
+                          onClick={() => cancelarCita(cita.id)}
+                          className="bg-rose-100 hover:bg-rose-200 text-rose-700 font-semibold px-3 py-1.5 rounded-lg text-xs transition-colors shadow-sm"
+                        >
+                          Cancelar ❌
+                        </button>
                       </td>
                     </tr>
                   ))}
