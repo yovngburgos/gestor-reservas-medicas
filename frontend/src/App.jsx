@@ -27,7 +27,7 @@ function App() {
 
   // 1. Cargar especialidades al montar el componente
   useEffect(() => {
-    fetch('http://localhost:3000/api/especialidades')
+    fetch('[https://api-reservas-medicas.onrender.com](https://api-reservas-medicas.onrender.com)/api/especialidades')
       .then(res => res.json())
       .then(data => setEspecialidades(data))
       .catch(err => console.error("Error al cargar especialidades:", err));
@@ -40,7 +40,7 @@ function App() {
       setMedicoSeleccionado('');
       return;
     }
-    fetch(`http://localhost:3000/api/medicos?especialidad_id=${especialidadSeleccionada}`)
+    fetch(`[https://api-reservas-medicas.onrender.com](https://api-reservas-medicas.onrender.com)/api/medicos?especialidad_id=${especialidadSeleccionada}`)
       .then(res => res.json())
       .then(data => setMedicos(data))
       .catch(err => console.error("Error al cargar médicos:", err));
@@ -53,7 +53,7 @@ function App() {
       setHoras([]);
       return;
     }
-    fetch(`http://localhost:3000/api/horas-disponibles?fecha=${fecha}&medico_id=${medicoSeleccionado}`)
+    fetch(`[https://api-reservas-medicas.onrender.com](https://api-reservas-medicas.onrender.com)/api/horas-disponibles?fecha=${fecha}&medico_id=${medicoSeleccionado}`)
       .then(res => res.json())
       .then(data => setHoras(data.horas_disponibles || []))
       .catch(err => console.error("Error al cargar horas:", err));
@@ -61,7 +61,7 @@ function App() {
 
   // 4. Cargar la lista de citas cuando se abre la pestaña de Admin
   const cargarCitasAdmin = () => {
-    fetch('http://localhost:3000/api/admin/citas')
+    fetch('[https://api-reservas-medicas.onrender.com](https://api-reservas-medicas.onrender.com)/api/admin/citas')
       .then(res => res.json())
       .then(data => setCitasAdmin(data))
       .catch(err => console.error("Error al cargar citas de admin:", err));
@@ -73,7 +73,7 @@ function App() {
     if (!confirmar) return;
 
     try {
-      const respuesta = await fetch(`http://localhost:3000/api/admin/citas/${id}`, {
+      const respuesta = await fetch(`[https://api-reservas-medicas.onrender.com](https://api-reservas-medicas.onrender.com)/api/admin/citas/${id}`, {
         method: 'DELETE'
       });
 
@@ -106,7 +106,7 @@ function App() {
     setMensaje(null);
 
     try {
-      const respuesta = await fetch('http://localhost:3000/api/reservar', {
+      const respuesta = await fetch('[https://api-reservas-medicas.onrender.com](https://api-reservas-medicas.onrender.com)/api/reservar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -124,7 +124,7 @@ function App() {
         setHoraSeleccionada(null);
         setFormData({ nombre: '', rut_dni: '', email: '', telefono: '', motivo: '' });
         // Recargar horas disponibles
-        fetch(`http://localhost:3000/api/horas-disponibles?fecha=${fecha}&medico_id=${medicoSeleccionado}`)
+        fetch(`[https://api-reservas-medicas.onrender.com](https://api-reservas-medicas.onrender.com)/api/horas-disponibles?fecha=${fecha}&medico_id=${medicoSeleccionado}`)
           .then(res => res.json())
           .then(d => setHoras(d.horas_disponibles || []));
       } else {
